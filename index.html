@@ -1,17 +1,695 @@
 <!DOCTYPE html>
-<html>
-    <head>
-        <meta charset = "UTF-8">
-        <title> Đoàn Nguyễn Minh Thư </title>
-        <link href = "style.css" rel="stylesheet">
-    </head>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .modal {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        .calendar-day {
+            min-height: 100px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .calendar-day:hover {
+            background-color: #f3f4f6;
+        }
+        .selected-day {
+            background-color: #fff;
+            border: 2px solid #3b82f6;
+        }
+    </style>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    <body>
-        <h1 align = "center"> CV Đoàn Nguyễn Minh Thư </h1>
-        <div class = "container">
-            <p> Họ và tên: Đoàn Nguyễn Minh Thư </p>
-            <p> Sinh viên: Trường Đại học Công nghệ thông tin - ĐHQGHCM </p>
-            <a href="https://www.facebook.com/dnmthuK32ltt"><button align="center">Kết bạn nhé</button></a>
+        // Global variables provided by the environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db;
+        let auth;
+        let userId;
+        let allTasks = [];
+        let calendarState = new Date();
+        let currentView = 'tasks';
+        let selectedDate = null;
+
+        // --- Helper functions ---
+        function showMessage(message, isError = false) {
+            const messageBox = document.getElementById('message-box');
+            messageBox.textContent = message;
+            messageBox.className = isError ? 'bg-red-500 text-white p-2 rounded-md mb-4' : 'bg-green-500 text-white p-2 rounded-md mb-4';
+            messageBox.classList.remove('hidden');
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 3000);
+        }
+
+        function openModal() {
+            document.getElementById('task-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('task-modal').classList.add('hidden');
+            document.getElementById('task-form').reset();
+        }
+
+        // --- Main initialization function ---
+        async function initializeAppAndFirebase() {
+            try {
+                // Initialize Firebase
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Sign in with custom token if available, otherwise sign in anonymously
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                userId = auth.currentUser.uid;
+                
+                // Show user ID for collaboration
+                document.getElementById('user-id-display').textContent = `User ID: ${userId}`;
+                
+                // Start listening for tasks
+                startTaskListener();
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+                showMessage("Lỗi khi khởi tạo ứng dụng. Vui lòng thử lại sau.", true);
+            }
+        }
+
+        // --- Firestore listener for real-time updates ---
+        function startTaskListener() {
+            if (!db) {
+                console.error("Firestore not initialized.");
+                return;
+            }
+
+            const tasksCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'tasks');
+            onSnapshot(tasksCollectionRef, (snapshot) => {
+                allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateDashboard(allTasks);
+                if (currentView === 'tasks') {
+                    renderTasks(allTasks);
+                } else if (currentView === 'calendar') {
+                    renderCalendar();
+                } else if (currentView === 'progress') {
+                    renderProgress();
+                } else if (currentView === 'reminders') {
+                    renderReminders();
+                }
+            }, (error) => {
+                console.error("Error listening to tasks:", error);
+                showMessage("Lỗi khi tải danh sách công việc. Vui lòng kiểm tra kết nối.", true);
+            });
+        }
+
+        // --- Add a new task from the modal form ---
+        async function addTaskFromModal(event) {
+            event.preventDefault();
+            
+            const taskTitle = document.getElementById('task-title').value.trim();
+            const taskDescription = document.getElementById('task-description').value.trim();
+            const taskPriority = document.getElementById('task-priority').value;
+            const taskCategory = document.getElementById('task-category').value.trim();
+            const taskDueDate = document.getElementById('task-due-date').value;
+
+            if (taskTitle === '') {
+                showMessage("Tiêu đề công việc không được để trống.", true);
+                return;
+            }
+
+            const tasksCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'tasks');
+            try {
+                await addDoc(tasksCollectionRef, {
+                    name: taskTitle,
+                    description: taskDescription,
+                    priority: taskPriority,
+                    category: taskCategory,
+                    dueDate: taskDueDate,
+                    completed: false,
+                    createdAt: new Date()
+                });
+                showMessage("Thêm công việc thành công!");
+                closeModal();
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                showMessage("Lỗi khi thêm công việc. Vui lòng thử lại.", true);
+            }
+        }
+
+        // --- Toggle task completion status ---
+        async function toggleTaskStatus(taskId, currentStatus) {
+            const taskDocRef = doc(db, 'artifacts', appId, 'users', userId, 'tasks', taskId);
+            try {
+                await updateDoc(taskDocRef, {
+                    completed: !currentStatus
+                });
+                showMessage("Cập nhật trạng thái công việc thành công!");
+            } catch (error) {
+                console.error("Error updating document:", error);
+                showMessage("Lỗi khi cập nhật trạng thái. Vui lòng thử lại.", true);
+            }
+        }
+
+        // --- Render tasks to the UI ---
+        function renderTasks(tasks) {
+            const taskList = document.getElementById('task-list');
+            taskList.innerHTML = '';
+            if (tasks.length === 0) {
+                taskList.innerHTML = '<li class="text-center text-gray-500 py-8">Chưa có công việc nào.</li>';
+                return;
+            }
+            tasks.forEach(task => {
+                const taskItem = document.createElement('li');
+                taskItem.className = `flex items-start space-x-4 bg-white p-6 rounded-xl shadow-sm border border-gray-200 ${task.completed ? 'opacity-60' : ''}`;
+                taskItem.innerHTML = `
+                    <input type="checkbox" data-id="${task.id}" ${task.completed ? 'checked' : ''} class="h-5 w-5 text-blue-600 rounded-md border-gray-300 focus:ring-blue-500 cursor-pointer">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold text-gray-800">${task.name}</h3>
+                        <p class="text-sm text-gray-500">${task.description || ''}</p>
+                        <div class="flex items-center space-x-4 text-sm text-gray-400 mt-2">
+                            <span class="flex items-center space-x-1">
+                                <i class="fa-solid fa-tag"></i>
+                                <span>${task.category || 'N/A'}</span>
+                            </span>
+                            <span class="flex items-center space-x-1">
+                                <i class="fa-solid fa-calendar-alt"></i>
+                                <span>${task.dueDate || 'N/A'}</span>
+                            </span>
+                        </div>
+                    </div>
+                `;
+                const checkbox = taskItem.querySelector('input[type="checkbox"]');
+                checkbox.addEventListener('change', () => toggleTaskStatus(task.id, task.completed));
+                taskList.appendChild(taskItem);
+            });
+        }
+
+        // --- Update dashboard statistics ---
+        function updateDashboard(tasks) {
+            const totalTasks = tasks.length;
+            const completedTasks = tasks.filter(t => t.completed).length;
+            const pendingTasks = totalTasks - completedTasks;
+
+            document.getElementById('total-tasks-count').textContent = totalTasks;
+            document.getElementById('completed-tasks-count').textContent = completedTasks;
+            document.getElementById('pending-tasks-count').textContent = pendingTasks;
+        }
+
+        // --- Calendar functions ---
+        function renderCalendar() {
+            const calendarDays = document.getElementById('calendar-days');
+            calendarDays.innerHTML = '';
+            const calendarMonthTitle = document.getElementById('calendar-month-title');
+            const today = new Date();
+            
+            const monthNames = ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"];
+            calendarMonthTitle.textContent = `${monthNames[calendarState.getMonth()]} ${calendarState.getFullYear()}`;
+            
+            const firstDayOfMonth = new Date(calendarState.getFullYear(), calendarState.getMonth(), 1).getDay();
+            const daysInMonth = new Date(calendarState.getFullYear(), calendarState.getMonth() + 1, 0).getDate();
+            
+            const tasksByDate = allTasks.reduce((acc, task) => {
+                if (task.dueDate) {
+                    if (!acc[task.dueDate]) {
+                        acc[task.dueDate] = [];
+                    }
+                    acc[task.dueDate].push(task);
+                }
+                return acc;
+            }, {});
+
+            // Add empty divs for preceding days
+            for (let i = 0; i < firstDayOfMonth; i++) {
+                const day = document.createElement('div');
+                day.className = 'w-full h-24 p-2';
+                calendarDays.appendChild(day);
+            }
+
+            // Add days of the month
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${calendarState.getFullYear()}-${String(calendarState.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const tasksForDay = tasksByDate[dateStr] || [];
+                const isToday = today.getFullYear() === calendarState.getFullYear() && today.getMonth() === calendarState.getMonth() && today.getDate() === day;
+                const isSelected = selectedDate === dateStr;
+                
+                const dayDiv = document.createElement('div');
+                dayDiv.className = `calendar-day w-full h-24 p-2 rounded-lg flex flex-col justify-start items-start space-y-1 overflow-y-auto ${isSelected ? 'selected-day' : 'bg-white'} ${isToday ? 'border-2 border-blue-500' : ''}`;
+                dayDiv.dataset.date = dateStr;
+                
+                let tasksHtml = tasksForDay.length > 0 ? 
+                    tasksForDay.map(task => `<span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full whitespace-nowrap overflow-hidden text-ellipsis">${task.name}</span>`).join('')
+                    : '';
+
+                dayDiv.innerHTML = `
+                    <span class="font-semibold text-gray-800 self-start">${day}</span>
+                    ${tasksHtml}
+                `;
+                dayDiv.addEventListener('click', () => {
+                    selectedDate = dateStr;
+                    renderCalendar();
+                    renderTasksForDate(dateStr);
+                });
+                calendarDays.appendChild(dayDiv);
+            }
+            if (!selectedDate) {
+                 document.getElementById('selected-date-title').textContent = 'Chọn một ngày';
+                 document.getElementById('tasks-for-date').innerHTML = `<p class="text-center text-gray-400">Nhấp vào một ngày để xem công việc</p>`;
+            }
+        }
+
+        function renderTasksForDate(dateStr) {
+            const selectedDateTitle = document.getElementById('selected-date-title');
+            selectedDateTitle.textContent = `Công việc ngày ${dateStr.split('-').reverse().join('/')}`;
+            const tasksList = document.getElementById('tasks-for-date');
+            tasksList.innerHTML = '';
+            const tasks = allTasks.filter(task => task.dueDate === dateStr);
+
+            if (tasks.length === 0) {
+                tasksList.innerHTML = `<p class="text-center text-gray-400">Không có công việc nào trong ngày này.</p>`;
+            } else {
+                tasks.forEach(task => {
+                    const taskItem = document.createElement('div');
+                    taskItem.className = `p-4 rounded-lg bg-gray-100 mb-2 border-l-4 ${task.completed ? 'border-green-500 opacity-60' : 'border-blue-500'}`;
+                    taskItem.innerHTML = `
+                        <p class="font-semibold text-gray-800">${task.name}</p>
+                        <p class="text-sm text-gray-500">${task.description || ''}</p>
+                    `;
+                    tasksList.appendChild(taskItem);
+                });
+            }
+        }
+
+        function renderProgress() {
+            const progressContainer = document.getElementById('progress-view');
+            
+            const totalTasks = allTasks.length;
+            const completedTasks = allTasks.filter(t => t.completed).length;
+            const pendingTasks = totalTasks - completedTasks;
+            const overdueTasks = allTasks.filter(t => !t.completed && t.dueDate && new Date(t.dueDate) < new Date()).length;
+            const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+            
+            // Weekly progress
+            const today = new Date();
+            const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay())); // Sunday
+            const endOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 6)); // Saturday
+            
+            const weeklyTasks = allTasks.filter(t => {
+                if (!t.createdAt) return false;
+                const createdDate = new Date(t.createdAt.seconds * 1000);
+                return createdDate >= startOfWeek && createdDate <= endOfWeek;
+            });
+            const weeklyCompleted = weeklyTasks.filter(t => t.completed).length;
+            const weeklyProgress = weeklyTasks.length > 0 ? Math.round((weeklyCompleted / weeklyTasks.length) * 100) : 0;
+
+            const highPriorityTasks = allTasks.filter(t => t.priority === 'Cao').length;
+            const mediumPriorityTasks = allTasks.filter(t => t.priority === 'Trung bình').length;
+            const lowPriorityTasks = allTasks.filter(t => t.priority === 'Thấp').length;
+
+            progressContainer.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-gray-100 p-6 rounded-xl shadow-sm space-y-2">
+                        <h3 class="text-gray-500">Tiến độ tổng thể</h3>
+                        <div class="flex justify-between items-center">
+                            <span class="text-4xl font-bold text-blue-700">${overallProgress}%</span>
+                            <span class="text-sm text-gray-500">${completedTasks}/${totalTasks}</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-blue-500 h-2 rounded-full" style="width: ${overallProgress}%"></div>
+                        </div>
+                        <p class="text-gray-500 text-sm">${pendingTasks} công việc còn lại</p>
+                    </div>
+                    <div class="bg-gray-100 p-6 rounded-xl shadow-sm space-y-2">
+                        <h3 class="text-gray-500">Tóm tắt công việc</h3>
+                        <ul class="text-sm space-y-1">
+                            <li class="flex justify-between items-center text-green-700">
+                                <span><i class="fa-solid fa-circle-check"></i> Hoàn thành</span>
+                                <span>${completedTasks}</span>
+                            </li>
+                            <li class="flex justify-between items-center text-orange-700">
+                                <span><i class="fa-solid fa-hourglass-half"></i> Đang chờ</span>
+                                <span>${pendingTasks}</span>
+                            </li>
+                            <li class="flex justify-between items-center text-red-700">
+                                <span><i class="fa-solid fa-triangle-exclamation"></i> Quá hạn</span>
+                                <span>${overdueTasks}</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="bg-gray-100 p-6 rounded-xl shadow-sm space-y-2">
+                        <h3 class="text-gray-500">Tuần này</h3>
+                        <div class="flex justify-between items-center">
+                            <span class="text-4xl font-bold text-blue-700">${weeklyProgress}%</span>
+                            <span class="text-sm text-gray-500">${weeklyCompleted}/${weeklyTasks.length}</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-blue-500 h-2 rounded-full" style="width: ${weeklyProgress}%"></div>
+                        </div>
+                        <p class="text-gray-500 text-sm">Tỷ lệ hoàn thành hàng tuần</p>
+                    </div>
+                    <div class="bg-gray-100 p-6 rounded-xl shadow-sm space-y-2">
+                        <h3 class="text-gray-500">Đến hạn hôm nay</h3>
+                        <p class="text-4xl font-bold text-red-500">${allTasks.filter(t => !t.completed && t.dueDate === new Date().toISOString().split('T')[0]).length}</p>
+                        <p class="text-gray-500 text-sm">Không có công việc nào đến hạn hôm nay</p>
+                    </div>
+                </div>
+
+                <div class="bg-gray-100 p-6 rounded-xl shadow-sm space-y-4">
+                    <h3 class="text-xl font-bold">Phân tích độ ưu tiên</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="text-center p-4 rounded-xl bg-red-100 text-red-700">
+                            <span class="block text-2xl font-bold">${highPriorityTasks}</span>
+                            <span class="block text-sm">Ưu tiên Cao</span>
+                        </div>
+                        <div class="text-center p-4 rounded-xl bg-yellow-100 text-yellow-700">
+                            <span class="block text-2xl font-bold">${mediumPriorityTasks}</span>
+                            <span class="block text-sm">Ưu tiên Trung bình</span>
+                        </div>
+                        <div class="text-center p-4 rounded-xl bg-green-100 text-green-700">
+                            <span class="block text-2xl font-bold">${lowPriorityTasks}</span>
+                            <span class="block text-sm">Ưu tiên Thấp</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderReminders() {
+            const remindersContainer = document.getElementById('reminders-view');
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+
+            const dueTodayTasks = allTasks.filter(t => !t.completed && t.dueDate === todayStr).sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt));
+            const overdueTasks = allTasks.filter(t => !t.completed && t.dueDate && new Date(t.dueDate) < now).sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate));
+            const upcomingTasks = allTasks.filter(t => !t.completed && t.dueDate && new Date(t.dueDate) > now).sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate));
+
+            let content = '';
+
+            if (dueTodayTasks.length > 0) {
+                content += `<div class="bg-yellow-50 p-6 rounded-xl mb-4">
+                    <h4 class="text-lg font-bold text-yellow-700 mb-2 flex items-center"><i class="fa-solid fa-clock mr-2"></i>Sắp đến hạn</h4>
+                    <ul class="list-disc list-inside space-y-2">
+                        ${dueTodayTasks.map(t => `<li class="text-yellow-800">${t.name}</li>`).join('')}
+                    </ul>
+                </div>`;
+            }
+
+            if (overdueTasks.length > 0) {
+                content += `<div class="bg-red-50 p-6 rounded-xl mb-4">
+                    <h4 class="text-lg font-bold text-red-700 mb-2 flex items-center"><i class="fa-solid fa-exclamation-triangle mr-2"></i>Quá hạn</h4>
+                    <ul class="list-disc list-inside space-y-2">
+                        ${overdueTasks.map(t => `<li class="text-red-800">${t.name} - Hạn: ${t.dueDate}</li>`).join('')}
+                    </ul>
+                </div>`;
+            }
+
+            if (upcomingTasks.length > 0) {
+                content += `<div class="bg-blue-50 p-6 rounded-xl mb-4">
+                    <h4 class="text-lg font-bold text-blue-700 mb-2 flex items-center"><i class="fa-solid fa-calendar-alt mr-2"></i>Sắp tới</h4>
+                    <ul class="list-disc list-inside space-y-2">
+                        ${upcomingTasks.map(t => `<li class="text-blue-800">${t.name} - Hạn: ${t.dueDate}</li>`).join('')}
+                    </ul>
+                </div>`;
+            }
+
+            if (content === '') {
+                content = `
+                    <div class="text-center py-12 text-gray-400">
+                        <i class="fa-solid fa-bell-slash text-5xl mb-4"></i>
+                        <p class="text-lg">Không có nhắc nhở sắp tới</p>
+                        <p>Bạn đã hoàn thành tất cả công việc!</p>
+                    </div>
+                `;
+            }
+
+            remindersContainer.innerHTML = `
+                <div class="bg-gray-100 p-6 rounded-xl shadow-sm">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-bold">Nhắc nhở</h2>
+                        <button id="enable-notifications-button" class="flex items-center space-x-2 bg-black text-white px-4 py-2 rounded-xl font-semibold shadow-md hover:bg-gray-800 transition-colors">
+                            <i class="fa-solid fa-bell"></i>
+                            <span>Bật thông báo</span>
+                        </button>
+                    </div>
+                    ${content}
+                </div>
+            `;
+
+            document.getElementById('enable-notifications-button').addEventListener('click', () => {
+                if (!("Notification" in window)) {
+                    showMessage("Trình duyệt này không hỗ trợ thông báo.", true);
+                } else if (Notification.permission === "granted") {
+                    showMessage("Thông báo đã được bật.", false);
+                    scheduleNotifications();
+                } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === "granted") {
+                            showMessage("Thông báo đã được bật.", false);
+                            scheduleNotifications();
+                        } else {
+                            showMessage("Bạn đã từ chối quyền thông báo.", true);
+                        }
+                    });
+                }
+            });
+        }
+
+        // Dummy function for scheduling notifications
+        function scheduleNotifications() {
+            const now = new Date();
+            const dueTodayTasks = allTasks.filter(t => !t.completed && t.dueDate === now.toISOString().split('T')[0]);
+
+            dueTodayTasks.forEach(task => {
+                new Notification("Đến hạn công việc", {
+                    body: `Công việc "${task.name}" đến hạn hôm nay!`,
+                    icon: "https://placehold.co/64x64/0000FF/FFFFFF?text=Todo"
+                });
+            });
+        }
+        
+        // --- Event listeners and initial setup ---
+        window.onload = function() {
+            initializeAppAndFirebase();
+
+            // Handle the "Add Task" button click to open the modal
+            document.querySelector('#add-task-button').addEventListener('click', openModal);
+            
+            // Handle the modal close buttons
+            document.getElementById('modal-close').addEventListener('click', closeModal);
+            document.getElementById('modal-cancel').addEventListener('click', closeModal);
+
+            // Handle the form submission
+            document.getElementById('task-form').addEventListener('submit', addTaskFromModal);
+
+            // Handle tab switching
+            document.getElementById('tasks-tab').addEventListener('click', () => {
+                currentView = 'tasks';
+                selectedDate = null; // Clear selected date
+                document.getElementById('task-view').classList.remove('hidden');
+                document.getElementById('calendar-view').classList.add('hidden');
+                document.getElementById('progress-view').classList.add('hidden');
+                document.getElementById('reminders-view').classList.add('hidden');
+                document.getElementById('tasks-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                renderTasks(allTasks);
+            });
+            document.getElementById('calendar-tab').addEventListener('click', () => {
+                currentView = 'calendar';
+                selectedDate = null; // Clear selected date on tab switch
+                document.getElementById('task-view').classList.add('hidden');
+                document.getElementById('calendar-view').classList.remove('hidden');
+                document.getElementById('progress-view').classList.add('hidden');
+                document.getElementById('reminders-view').classList.add('hidden');
+                document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('calendar-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                renderCalendar();
+            });
+            document.getElementById('progress-tab').addEventListener('click', () => {
+                currentView = 'progress';
+                document.getElementById('task-view').classList.add('hidden');
+                document.getElementById('calendar-view').classList.add('hidden');
+                document.getElementById('progress-view').classList.remove('hidden');
+                document.getElementById('reminders-view').classList.add('hidden');
+                document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('progress-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                renderProgress();
+            });
+            document.getElementById('reminders-tab').addEventListener('click', () => {
+                currentView = 'reminders';
+                document.getElementById('task-view').classList.add('hidden');
+                document.getElementById('calendar-view').classList.add('hidden');
+                document.getElementById('progress-view').classList.add('hidden');
+                document.getElementById('reminders-view').classList.remove('hidden');
+                document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('reminders-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
+                renderReminders();
+            });
+
+            // Calendar navigation
+            document.getElementById('prev-month').addEventListener('click', () => {
+                calendarState.setMonth(calendarState.getMonth() - 1);
+                selectedDate = null; // Clear selected date on month change
+                renderCalendar();
+            });
+            document.getElementById('next-month').addEventListener('click', () => {
+                calendarState.setMonth(calendarState.getMonth() + 1);
+                selectedDate = null; // Clear selected date on month change
+                renderCalendar();
+            });
+            document.getElementById('today-button').addEventListener('click', () => {
+                calendarState = new Date();
+                selectedDate = null; // Clear selected date on returning to today
+                renderCalendar();
+            });
+        };
+    </script>
+</head>
+<body class="p-6 bg-gray-50 font-sans">
+    <div class="max-w-7xl mx-auto bg-white p-8 rounded-xl shadow-lg">
+        <div id="message-box" class="hidden"></div>
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-blue-700">Todo Dashboard</h1>
+                <p class="text-gray-500">Quản lý công việc, theo dõi tiến độ và duy trì sự ngăn nắp</p>
+            </div>
+            <button id="add-task-button" class="flex items-center space-x-2 bg-black text-white px-4 py-2 rounded-xl font-semibold shadow-md hover:bg-gray-800 transition-colors">
+                <i class="fa-solid fa-plus"></i>
+                <span>Thêm công việc</span>
+            </button>
         </div>
-    </body>
+
+        <p id="user-id-display" class="text-sm text-gray-500 mb-4"></p>
+        
+        <!-- Dashboard stats cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+            <div class="bg-blue-100 text-blue-700 p-6 rounded-xl shadow-sm">
+                <div class="flex items-center justify-between">
+                    <span class="text-lg font-semibold">Tổng công việc</span>
+                    <i class="fa-solid fa-list-check text-2xl"></i>
+                </div>
+                <div class="mt-4 text-4xl font-bold" id="total-tasks-count">0</div>
+            </div>
+            <div class="bg-green-100 text-green-700 p-6 rounded-xl shadow-sm">
+                <div class="flex items-center justify-between">
+                    <span class="text-lg font-semibold">Hoàn thành</span>
+                    <i class="fa-solid fa-circle-check text-2xl"></i>
+                </div>
+                <div class="mt-4 text-4xl font-bold" id="completed-tasks-count">0</div>
+            </div>
+            <div class="bg-orange-100 text-orange-700 p-6 rounded-xl shadow-sm">
+                <div class="flex items-center justify-between">
+                    <span class="text-lg font-semibold">Đang chờ xử lý</span>
+                    <i class="fa-solid fa-hourglass-half text-2xl"></i>
+                </div>
+                <div class="mt-4 text-4xl font-bold" id="pending-tasks-count">0</div>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="flex items-center space-x-8 text-gray-500 mb-6 border-b border-gray-200">
+            <button id="tasks-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none border-b-2 border-blue-500 text-blue-500 transition-colors duration-200">Quản lý công việc</button>
+            <button id="calendar-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none hover:text-blue-500 transition-colors duration-200">Lịch</button>
+            <button id="progress-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none hover:text-blue-500 transition-colors duration-200">Tiến độ</button>
+            <button id="reminders-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none hover:text-blue-500 transition-colors duration-200">Nhắc nhở</button>
+        </div>
+        
+        <!-- Main Content View -->
+        <div id="task-view">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Danh sách công việc của tôi</h2>
+            <ul id="task-list" class="space-y-4">
+                <!-- Tasks will be rendered here -->
+            </ul>
+        </div>
+
+        <div id="calendar-view" class="hidden">
+            <div class="bg-gray-100 p-6 rounded-xl shadow-sm mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <button id="prev-month" class="text-gray-500 hover:text-gray-800 transition-colors"><i class="fa-solid fa-chevron-left"></i></button>
+                    <h2 id="calendar-month-title" class="text-xl font-bold text-gray-800"></h2>
+                    <button id="next-month" class="text-gray-500 hover:text-gray-800 transition-colors"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                <div class="grid grid-cols-7 text-center font-semibold text-gray-500 mb-2">
+                    <div>CN</div><div>T2</div><div>T3</div><div>T4</div><div>T5</div><div>T6</div><div>T7</div>
+                </div>
+                <div id="calendar-days" class="grid grid-cols-7 gap-2">
+                    <!-- Calendar days will be rendered here -->
+                </div>
+            </div>
+            <div class="bg-gray-100 p-6 rounded-xl shadow-sm">
+                <h3 id="selected-date-title" class="text-xl font-bold mb-4"></h3>
+                <div id="tasks-for-date" class="space-y-4">
+                    <!-- Tasks for selected date will be rendered here -->
+                </div>
+            </div>
+        </div>
+
+        <div id="progress-view" class="hidden">
+            <!-- Progress report will be rendered here -->
+        </div>
+
+        <div id="reminders-view" class="hidden">
+            <!-- Reminders will be rendered here -->
+        </div>
+
+        <!-- Task Modal -->
+        <div id="task-modal" class="modal fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+            <div class="bg-white rounded-xl shadow-xl p-8 w-full max-w-lg relative">
+                <button id="modal-close" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors">
+                    <i class="fa-solid fa-xmark fa-lg"></i>
+                </button>
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Thêm công việc mới</h2>
+                <form id="task-form" class="space-y-4">
+                    <div>
+                        <label for="task-title" class="block text-sm font-medium text-gray-700">Tiêu đề</label>
+                        <input type="text" id="task-title" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2">
+                    </div>
+                    <div>
+                        <label for="task-description" class="block text-sm font-medium text-gray-700">Mô tả (tùy chọn)</label>
+                        <textarea id="task-description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2"></textarea>
+                    </div>
+                    <div>
+                        <label for="task-priority" class="block text-sm font-medium text-gray-700">Độ ưu tiên</label>
+                        <select id="task-priority" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2">
+                            <option value="Thấp">Thấp</option>
+                            <option value="Trung bình" selected>Trung bình</option>
+                            <option value="Cao">Cao</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="task-category" class="block text-sm font-medium text-gray-700">Danh mục (tùy chọn)</label>
+                        <input type="text" id="task-category" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2">
+                    </div>
+                    <div>
+                        <label for="task-due-date" class="block text-sm font-medium text-gray-700">Ngày đến hạn (tùy chọn)</label>
+                        <input type="date" id="task-due-date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2">
+                    </div>
+                    <div class="flex justify-end space-x-4 pt-4">
+                        <button type="button" id="modal-cancel" class="px-4 py-2 text-sm font-medium text-gray-700 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors">Hủy</button>
+                        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors">Lưu công việc</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
 </html>
