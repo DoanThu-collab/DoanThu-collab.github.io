@@ -25,18 +25,6 @@
         }
     </style>
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global variables provided by the environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        let db;
-        let auth;
-        let userId;
         let allTasks = [];
         let calendarState = new Date();
         let currentView = 'tasks';
@@ -61,108 +49,145 @@
             document.getElementById('task-modal').classList.add('hidden');
             document.getElementById('task-form').reset();
         }
+        
+        function setupEventListeners() {
+            document.querySelector('#add-task-button').addEventListener('click', openModal);
+            
+            document.getElementById('modal-close').addEventListener('click', closeModal);
+            document.getElementById('modal-cancel').addEventListener('click', closeModal);
 
-        // --- Main initialization function ---
-        async function initializeAppAndFirebase() {
-            try {
-                // Initialize Firebase
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
+            document.getElementById('task-form').addEventListener('submit', addTaskFromModal);
 
-                // Sign in with custom token if available, otherwise sign in anonymously
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-                userId = auth.currentUser.uid;
-                
-                // Show user ID for collaboration
-                document.getElementById('user-id-display').textContent = `User ID: ${userId}`;
-                
-                // Start listening for tasks
-                startTaskListener();
-            } catch (error) {
-                console.error("Error initializing Firebase:", error);
-                showMessage("Lỗi khi khởi tạo ứng dụng. Vui lòng thử lại sau.", true);
+            document.getElementById('tasks-tab').addEventListener('click', () => {
+                currentView = 'tasks';
+                selectedDate = null; 
+                document.getElementById('task-view').classList.remove('hidden');
+                document.getElementById('calendar-view').classList.add('hidden');
+                document.getElementById('progress-view').classList.add('hidden');
+                document.getElementById('reminders-view').classList.add('hidden');
+                document.getElementById('tasks-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                renderTasks(allTasks);
+            });
+            document.getElementById('calendar-tab').addEventListener('click', () => {
+                currentView = 'calendar';
+                selectedDate = null; 
+                document.getElementById('task-view').classList.add('hidden');
+                document.getElementById('calendar-view').classList.remove('hidden');
+                document.getElementById('progress-view').classList.add('hidden');
+                document.getElementById('reminders-view').classList.add('hidden');
+                document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('calendar-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                renderCalendar();
+            });
+            document.getElementById('progress-tab').addEventListener('click', () => {
+                currentView = 'progress';
+                document.getElementById('task-view').classList.add('hidden');
+                document.getElementById('calendar-view').classList.add('hidden');
+                document.getElementById('progress-view').classList.remove('hidden');
+                document.getElementById('reminders-view').classList.add('hidden');
+                document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('progress-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                renderProgress();
+            });
+            document.getElementById('reminders-tab').addEventListener('click', () => {
+                currentView = 'reminders';
+                document.getElementById('task-view').classList.add('hidden');
+                document.getElementById('calendar-view').classList.add('hidden');
+                document.getElementById('progress-view').classList.add('hidden');
+                document.getElementById('reminders-view').classList.remove('hidden');
+                document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('reminders-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
+                renderReminders();
+            });
+
+            document.getElementById('prev-month').addEventListener('click', () => {
+                calendarState.setMonth(calendarState.getMonth() - 1);
+                selectedDate = null; 
+                renderCalendar();
+            });
+            document.getElementById('next-month').addEventListener('click', () => {
+                calendarState.setMonth(calendarState.getMonth() + 1);
+                selectedDate = null; 
+                renderCalendar();
+            });
+            document.getElementById('today-button').addEventListener('click', () => {
+                calendarState = new Date();
+                selectedDate = null; 
+                renderCalendar();
+            });
+        }
+        
+        // --- Local Storage Functions ---
+        function saveTasksToLocalStorage() {
+            localStorage.setItem('allTasks', JSON.stringify(allTasks));
+        }
+
+        function loadTasksFromLocalStorage() {
+            const savedTasks = localStorage.getItem('allTasks');
+            if (savedTasks) {
+                allTasks = JSON.parse(savedTasks);
             }
         }
 
-        // --- Firestore listener for real-time updates ---
-        function startTaskListener() {
-            if (!db) {
-                console.error("Firestore not initialized.");
-                return;
-            }
-
-            const tasksCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'tasks');
-            onSnapshot(tasksCollectionRef, (snapshot) => {
-                allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                updateDashboard(allTasks);
-                if (currentView === 'tasks') {
-                    renderTasks(allTasks);
-                } else if (currentView === 'calendar') {
-                    renderCalendar();
-                } else if (currentView === 'progress') {
-                    renderProgress();
-                } else if (currentView === 'reminders') {
-                    renderReminders();
-                }
-            }, (error) => {
-                console.error("Error listening to tasks:", error);
-                showMessage("Lỗi khi tải danh sách công việc. Vui lòng kiểm tra kết nối.", true);
-            });
+        // --- Main initialization function ---
+        function initializeApp() {
+            loadTasksFromLocalStorage();
+            setupEventListeners();
+            updateDashboard(allTasks);
+            renderTasks(allTasks);
+            showMessage("Đã sẵn sàng. Dữ liệu sẽ được lưu trên thiết bị của bạn.", false);
         }
 
         // --- Add a new task from the modal form ---
-        async function addTaskFromModal(event) {
-            event.preventDefault();
+        function addTaskFromModal(event) {
+            event.preventDefault(); 
             
-            const taskTitle = document.getElementById('task-title').value.trim();
-            const taskDescription = document.getElementById('task-description').value.trim();
-            const taskPriority = document.getElementById('task-priority').value;
-            const taskCategory = document.getElementById('task-category').value.trim();
-            const taskDueDate = document.getElementById('task-due-date').value;
+            const titleEl = document.getElementById('task-title');
+            const descEl = document.getElementById('task-description');
+            const priorityEl = document.getElementById('task-priority');
+            const categoryEl = document.getElementById('task-category');
+            const dueDateEl = document.getElementById('task-due-date');
+
+            let taskTitle = titleEl.value.trim();
+            let taskDescription = descEl.value.trim();
+            let taskPriority = priorityEl.value;
+            let taskCategory = categoryEl.value.trim();
+            let taskDueDate = dueDateEl.value;
 
             if (taskTitle === '') {
                 showMessage("Tiêu đề công việc không được để trống.", true);
                 return;
             }
 
-            const tasksCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'tasks');
-            try {
-                await addDoc(tasksCollectionRef, {
-                    name: taskTitle,
-                    description: taskDescription,
-                    priority: taskPriority,
-                    category: taskCategory,
-                    dueDate: taskDueDate,
-                    completed: false,
-                    createdAt: new Date()
-                });
-                showMessage("Thêm công việc thành công!");
-                closeModal();
-            } catch (error) {
-                console.error("Error adding document: ", error);
-                showMessage("Lỗi khi thêm công việc. Vui lòng thử lại.", true);
-            }
+            const newTask = {
+                id: Date.now().toString(),
+                name: taskTitle,
+                description: taskDescription,
+                priority: taskPriority,
+                category: taskCategory,
+                dueDate: taskDueDate,
+                completed: false,
+                createdAt: new Date().toISOString()
+            };
+            
+            allTasks.push(newTask);
+            saveTasksToLocalStorage();
+            
+            showMessage("Thêm công việc thành công!");
+            updateDashboard(allTasks);
+            renderTasks(allTasks);
+            closeModal();
         }
-
-        // --- Toggle task completion status ---
-        async function toggleTaskStatus(taskId, currentStatus) {
-            const taskDocRef = doc(db, 'artifacts', appId, 'users', userId, 'tasks', taskId);
-            try {
-                await updateDoc(taskDocRef, {
-                    completed: !currentStatus
-                });
-                showMessage("Cập nhật trạng thái công việc thành công!");
-            } catch (error) {
-                console.error("Error updating document:", error);
-                showMessage("Lỗi khi cập nhật trạng thái. Vui lòng thử lại.", true);
-            }
-        }
-
+        
         // --- Render tasks to the UI ---
         function renderTasks(tasks) {
             const taskList = document.getElementById('task-list');
@@ -195,6 +220,16 @@
                 checkbox.addEventListener('change', () => toggleTaskStatus(task.id, task.completed));
                 taskList.appendChild(taskItem);
             });
+        }
+        
+        function toggleTaskStatus(taskId, currentStatus) {
+            const taskIndex = allTasks.findIndex(task => task.id === taskId);
+            if (taskIndex !== -1) {
+                allTasks[taskIndex].completed = !currentStatus;
+                saveTasksToLocalStorage();
+                updateDashboard(allTasks);
+                renderTasks(allTasks);
+            }
         }
 
         // --- Update dashboard statistics ---
@@ -231,14 +266,12 @@
                 return acc;
             }, {});
 
-            // Add empty divs for preceding days
             for (let i = 0; i < firstDayOfMonth; i++) {
                 const day = document.createElement('div');
                 day.className = 'w-full h-24 p-2';
                 calendarDays.appendChild(day);
             }
 
-            // Add days of the month
             for (let day = 1; day <= daysInMonth; day++) {
                 const dateStr = `${calendarState.getFullYear()}-${String(calendarState.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const tasksForDay = tasksByDate[dateStr] || [];
@@ -301,14 +334,13 @@
             const overdueTasks = allTasks.filter(t => !t.completed && t.dueDate && new Date(t.dueDate) < new Date()).length;
             const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
             
-            // Weekly progress
             const today = new Date();
-            const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay())); // Sunday
-            const endOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 6)); // Saturday
+            const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay())); 
+            const endOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 6)); 
             
             const weeklyTasks = allTasks.filter(t => {
                 if (!t.createdAt) return false;
-                const createdDate = new Date(t.createdAt.seconds * 1000);
+                const createdDate = new Date(t.createdAt);
                 return createdDate >= startOfWeek && createdDate <= endOfWeek;
             });
             const weeklyCompleted = weeklyTasks.filter(t => t.completed).length;
@@ -466,7 +498,6 @@
             });
         }
 
-        // Dummy function for scheduling notifications
         function scheduleNotifications() {
             const now = new Date();
             const dueTodayTasks = allTasks.filter(t => !t.completed && t.dueDate === now.toISOString().split('T')[0]);
@@ -479,88 +510,8 @@
             });
         }
         
-        // --- Event listeners and initial setup ---
         window.onload = function() {
-            initializeAppAndFirebase();
-
-            // Handle the "Add Task" button click to open the modal
-            document.querySelector('#add-task-button').addEventListener('click', openModal);
-            
-            // Handle the modal close buttons
-            document.getElementById('modal-close').addEventListener('click', closeModal);
-            document.getElementById('modal-cancel').addEventListener('click', closeModal);
-
-            // Handle the form submission
-            document.getElementById('task-form').addEventListener('submit', addTaskFromModal);
-
-            // Handle tab switching
-            document.getElementById('tasks-tab').addEventListener('click', () => {
-                currentView = 'tasks';
-                selectedDate = null; // Clear selected date
-                document.getElementById('task-view').classList.remove('hidden');
-                document.getElementById('calendar-view').classList.add('hidden');
-                document.getElementById('progress-view').classList.add('hidden');
-                document.getElementById('reminders-view').classList.add('hidden');
-                document.getElementById('tasks-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                renderTasks(allTasks);
-            });
-            document.getElementById('calendar-tab').addEventListener('click', () => {
-                currentView = 'calendar';
-                selectedDate = null; // Clear selected date on tab switch
-                document.getElementById('task-view').classList.add('hidden');
-                document.getElementById('calendar-view').classList.remove('hidden');
-                document.getElementById('progress-view').classList.add('hidden');
-                document.getElementById('reminders-view').classList.add('hidden');
-                document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('calendar-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                renderCalendar();
-            });
-            document.getElementById('progress-tab').addEventListener('click', () => {
-                currentView = 'progress';
-                document.getElementById('task-view').classList.add('hidden');
-                document.getElementById('calendar-view').classList.add('hidden');
-                document.getElementById('progress-view').classList.remove('hidden');
-                document.getElementById('reminders-view').classList.add('hidden');
-                document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('progress-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                renderProgress();
-            });
-            document.getElementById('reminders-tab').addEventListener('click', () => {
-                currentView = 'reminders';
-                document.getElementById('task-view').classList.add('hidden');
-                document.getElementById('calendar-view').classList.add('hidden');
-                document.getElementById('progress-view').classList.add('hidden');
-                document.getElementById('reminders-view').classList.remove('hidden');
-                document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-                document.getElementById('reminders-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
-                renderReminders();
-            });
-
-            // Calendar navigation
-            document.getElementById('prev-month').addEventListener('click', () => {
-                calendarState.setMonth(calendarState.getMonth() - 1);
-                selectedDate = null; // Clear selected date on month change
-                renderCalendar();
-            });
-            document.getElementById('next-month').addEventListener('click', () => {
-                calendarState.setMonth(calendarState.getMonth() + 1);
-                selectedDate = null; // Clear selected date on month change
-                renderCalendar();
-            });
-            document.getElementById('today-button').addEventListener('click', () => {
-                calendarState = new Date();
-                selectedDate = null; // Clear selected date on returning to today
-                renderCalendar();
-            });
+            initializeApp();
         };
     </script>
 </head>
@@ -577,10 +528,7 @@
                 <span>Thêm công việc</span>
             </button>
         </div>
-
-        <p id="user-id-display" class="text-sm text-gray-500 mb-4"></p>
         
-        <!-- Dashboard stats cards -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
             <div class="bg-blue-100 text-blue-700 p-6 rounded-xl shadow-sm">
                 <div class="flex items-center justify-between">
@@ -605,7 +553,6 @@
             </div>
         </div>
 
-        <!-- Navigation Tabs -->
         <div class="flex items-center space-x-8 text-gray-500 mb-6 border-b border-gray-200">
             <button id="tasks-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none border-b-2 border-blue-500 text-blue-500 transition-colors duration-200">Quản lý công việc</button>
             <button id="calendar-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none hover:text-blue-500 transition-colors duration-200">Lịch</button>
@@ -613,12 +560,10 @@
             <button id="reminders-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none hover:text-blue-500 transition-colors duration-200">Nhắc nhở</button>
         </div>
         
-        <!-- Main Content View -->
         <div id="task-view">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Danh sách công việc của tôi</h2>
             <ul id="task-list" class="space-y-4">
-                <!-- Tasks will be rendered here -->
-            </ul>
+                </ul>
         </div>
 
         <div id="calendar-view" class="hidden">
@@ -632,26 +577,21 @@
                     <div>CN</div><div>T2</div><div>T3</div><div>T4</div><div>T5</div><div>T6</div><div>T7</div>
                 </div>
                 <div id="calendar-days" class="grid grid-cols-7 gap-2">
-                    <!-- Calendar days will be rendered here -->
-                </div>
+                    </div>
             </div>
             <div class="bg-gray-100 p-6 rounded-xl shadow-sm">
                 <h3 id="selected-date-title" class="text-xl font-bold mb-4"></h3>
                 <div id="tasks-for-date" class="space-y-4">
-                    <!-- Tasks for selected date will be rendered here -->
-                </div>
+                    </div>
             </div>
         </div>
 
         <div id="progress-view" class="hidden">
-            <!-- Progress report will be rendered here -->
-        </div>
+            </div>
 
         <div id="reminders-view" class="hidden">
-            <!-- Reminders will be rendered here -->
-        </div>
+            </div>
 
-        <!-- Task Modal -->
         <div id="task-modal" class="modal fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
             <div class="bg-white rounded-xl shadow-xl p-8 w-full max-w-lg relative">
                 <button id="modal-close" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors">
