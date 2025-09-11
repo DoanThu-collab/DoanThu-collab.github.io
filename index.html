@@ -135,17 +135,33 @@
             const savedTasks = localStorage.getItem('allTasks');
             if (savedTasks) {
                 allTasks = JSON.parse(savedTasks);
-            }
+            } else {
+                allTasks = []; // đảm bảo không bị undefined
         }
+    updateDashboard(allTasks);   // cập nhật số liệu ngay
+    renderTasks(allTasks);       // render lại danh sách ngay
+}
+
 
         // --- Main initialization function ---
         function initializeApp() {
             loadTasksFromLocalStorage();
             setupEventListeners();
-            updateDashboard(allTasks);
-            renderTasks(allTasks);
             showMessage("Đã sẵn sàng. Dữ liệu sẽ được lưu trên thiết bị của bạn.", false);
+
+            // 🔔 Tự bật thông báo nếu user đã cho phép trước đó
+            if (localStorage.getItem("notificationsEnabled") === "true" && Notification.permission === "granted") {
+                scheduleNotifications();
+            } else {
+                // Đảm bảo nút "Bật thông báo" được hiển thị đúng
+                const enableButton = document.getElementById('enable-notifications-button');
+                if (Notification.permission === "denied") {
+                    enableButton.textContent = 'Đã từ chối quyền';
+                    enableButton.disabled = true;
+                }
+            }
         }
+
 
         // --- Add a new task from the modal form ---
         function addTaskFromModal(event) {
@@ -482,33 +498,62 @@
             document.getElementById('enable-notifications-button').addEventListener('click', () => {
                 if (!("Notification" in window)) {
                     showMessage("Trình duyệt này không hỗ trợ thông báo.", true);
-                } else if (Notification.permission === "granted") {
-                    showMessage("Thông báo đã được bật.", false);
-                    scheduleNotifications();
-                } else if (Notification.permission !== "denied") {
-                    Notification.requestPermission().then(permission => {
-                        if (permission === "granted") {
-                            showMessage("Thông báo đã được bật.", false);
-                            scheduleNotifications();
-                        } else {
-                            showMessage("Bạn đã từ chối quyền thông báo.", true);
-                        }
-                    });
+                    return;
                 }
+
+                if (Notification.permission === "denied") {
+                    showMessage("Bạn đã từ chối quyền thông báo. Vui lòng bật thủ công trong cài đặt trình duyệt.", true);
+                    return;
+                }
+
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") {
+                        localStorage.setItem("notificationsEnabled", "true");
+                        showMessage("Thông báo đã được bật!", false);
+                        scheduleNotifications();
+                    } else {
+                        localStorage.setItem("notificationsEnabled", "false");
+                        showMessage("Bạn đã từ chối quyền thông báo.", true);
+                    }
+                 });
             });
+
         }
 
         function scheduleNotifications() {
-            const now = new Date();
-            const dueTodayTasks = allTasks.filter(t => !t.completed && t.dueDate === now.toISOString().split('T')[0]);
+            if (window.notificationInterval) {
+                clearInterval(window.notificationInterval);
+            }
 
-            dueTodayTasks.forEach(task => {
-                new Notification("Đến hạn công việc", {
-                    body: `Công việc "${task.name}" đến hạn hôm nay!`,
-                    icon: "https://placehold.co/64x64/0000FF/FFFFFF?text=Todo"
-                });
-            });
+            const notify = () => {
+                const now = new Date();
+                const todayStr = now.toISOString().split('T')[0];
+                const notifiedTaskIds = JSON.parse(localStorage.getItem('notifiedTaskIds') || '[]');
+
+                const dueTodayTasks = allTasks.filter(t =>
+                    !t.completed && t.dueDate === todayStr && !notifiedTaskIds.includes(t.id)
+                );
+
+                if (dueTodayTasks.length > 0) {
+                    dueTodayTasks.forEach(task => {
+                        new Notification("Đến hạn công việc", {
+                            body: `Công việc "${task.name}" đến hạn hôm nay!`,
+                            icon: "https://placehold.co/64x64/0000FF/FFFFFF?text=Todo"
+                        });
+                        notifiedTaskIds.push(task.id);
+                    });
+                    localStorage.setItem('notifiedTaskIds', JSON.stringify(notifiedTaskIds));
+                }
+            };
+
+            // Chạy lần đầu ngay lập tức
+            notify();
+
+            // Kiểm tra định kỳ mỗi giờ
+            window.notificationInterval = setInterval(notify, 60 * 60 * 1000); 
         }
+
+
         
         window.onload = function() {
             initializeApp();
