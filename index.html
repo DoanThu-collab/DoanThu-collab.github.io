@@ -485,7 +485,7 @@
             const tasks = allTasks.filter(task => task.dueDate === dateStr);
 
             if (tasks.length === 0) {
-                tasksList.innerHTML = `<p class="text-center text-gray-400">No tasks for this day.</p>`;
+                tasksList.innerHTML = `<p class="text-center text-gray-400">No tasks for this day</p>`;
             } else {
                 tasks.forEach(task => {
                     const taskItem = document.createElement('div');
@@ -655,12 +655,12 @@
 
             document.getElementById('enable-notifications-button').addEventListener('click', () => {
                 if (!("Notification" in window)) {
-                    showMessage("This browser does not support notifications.", true);
+                    showMessage("This browser does not support notifications", true);
                     return;
                 }
 
                 if (Notification.permission === "denied") {
-                    showMessage("You have denied notifications permission. Please enable it manually in your browser settings.", true);
+                    showMessage("You have denied notifications permission. Please enable it manually in your browser settings", true);
                     return;
                 }
 
@@ -671,7 +671,7 @@
                         scheduleNotifications();
                     } else {
                         localStorage.setItem("notificationsEnabled", "false");
-                        showMessage("You have denied notification permission.", true);
+                        showMessage("You have denied notification permission", true);
                     }
                  });
             });
@@ -897,3 +897,4 @@
     </div>
 </body>
 </html>
+
