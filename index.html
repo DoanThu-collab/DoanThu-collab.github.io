@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/naver-favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alex's Todo Web</title>
+    <title>NAVER Vietnam AI Hackathon 2025</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -30,6 +31,14 @@
             text-decoration: line-through;
             opacity: 0.6;
         }
+
+        .dark{
+            background-color: #1a202c !important;
+            color: #f7fafc !important;
+        }
+        .dark .bg-white{ background-color: #2d3748 !important; }
+        .dark .text-gray-800 { color: #f7fafc !important; }
+        .dark .text-gray-500 { color: #a0aec0 !important; }
     </style>
     <script type="module">
         let allTasks = [];
@@ -76,10 +85,12 @@
                 document.getElementById('calendar-view').classList.add('hidden');
                 document.getElementById('progress-view').classList.add('hidden');
                 document.getElementById('reminders-view').classList.add('hidden');
+                document.getElementById('completed-view').classList.add('hidden');
                 document.getElementById('tasks-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('completed-tab').classList.remove('border-b-2','border-blue-500','text-blue-500');
                 renderTasks();
             });
             document.getElementById('calendar-tab').addEventListener('click', () => {
@@ -89,10 +100,12 @@
                 document.getElementById('calendar-view').classList.remove('hidden');
                 document.getElementById('progress-view').classList.add('hidden');
                 document.getElementById('reminders-view').classList.add('hidden');
+                document.getElementById('completed-view').classList.add('hidden');
                 document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('calendar-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('completed-tab').classList.remove('border-b-2','border-blue-500','text-blue-500');
                 renderCalendar();
             });
             document.getElementById('progress-tab').addEventListener('click', () => {
@@ -101,10 +114,12 @@
                 document.getElementById('calendar-view').classList.add('hidden');
                 document.getElementById('progress-view').classList.remove('hidden');
                 document.getElementById('reminders-view').classList.add('hidden');
+                document.getElementById('completed-view').classList.add('hidden');
                 document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('progress-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('completed-tab').classList.remove('border-b-2','border-blue-500','text-blue-500');
                 renderProgress();
             });
             document.getElementById('reminders-tab').addEventListener('click', () => {
@@ -113,11 +128,30 @@
                 document.getElementById('calendar-view').classList.add('hidden');
                 document.getElementById('progress-view').classList.add('hidden');
                 document.getElementById('reminders-view').classList.remove('hidden');
+                document.getElementById('completed-view').classList.add('hidden');
                 document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
                 document.getElementById('reminders-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('completed-tab').classList.remove('border-b-2','border-blue-500','text-blue-500');
                 renderReminders();
+            });
+
+            document.getElementById('completed-tab').addEventListener('click', () => {
+                currentView = 'completed';
+                document.getElementById('task-view').classList.add('hidden');
+                document.getElementById('calendar-view').classList.add('hidden');
+                document.getElementById('progress-view').classList.add('hidden');
+                document.getElementById('reminders-view').classList.add('hidden');
+                document.getElementById('completed-view').classList.remove('hidden');
+
+                document.getElementById('tasks-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('calendar-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('progress-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('reminders-tab').classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
+                document.getElementById('completed-tab').classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
+
+                renderCompletedTasks();
             });
 
             document.getElementById('prev-month').addEventListener('click', () => {
@@ -136,6 +170,39 @@
                 renderCalendar();
             });
         }
+
+        function renderCompletedTasks() {
+            const completedList = document.getElementById('completed-list');
+            completedList.innerHTML = '';
+
+            const completedTasks = allTasks.filter(task => task.completed);
+
+            if (completedTasks.length === 0) {
+                completedList.innerHTML = '<li class="text-center text-gray-500 py-8">No completed tasks yet</li>';
+                return;
+            }
+
+            completedTasks.forEach(task => {
+                const taskItem = document.createElement('li');
+                taskItem.className = 'p-4 rounded-xl shadow-sm border border-gray-200 bg-white transition-all duration-300 task-completed';
+                taskItem.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center space-x-3">
+                            <input type="checkbox" data-id="${task.id}" checked class="h-5 w-5 text-green-600 rounded-md border-gray-300 focus:ring-green-500 cursor-pointer">
+                            <div>
+                                <h3 class="font-semibold text-gray-800">${task.name}</h3>
+                                <p class="text-sm text-gray-500">${task.description || ''}</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">Completed</span>
+                    </div>
+                `;
+                const checkbox = taskItem.querySelector('input[type="checkbox"]');
+                checkbox.addEventListener('change', () => toggleTaskStatus(task.id, task.completed));
+                completedList.appendChild(taskItem);
+            });
+        }
+
 
         function setupSearchAndSort() {
             const searchInput = document.getElementById('search-input');
@@ -223,7 +290,7 @@
             loadTasksFromLocalStorage();
             setupEventListeners();
             setupSearchAndSort();
-            showMessage("Done. The data will be saved on your device.", false);
+            showMessage("Done. The data will be saved on your device", false);
 
             if (localStorage.getItem("notificationsEnabled") === "true" && Notification.permission === "granted") {
                 scheduleNotifications();
@@ -235,6 +302,18 @@
                 }
             }
         }
+
+        document.getElementById("toggle-theme").addEventListener("click", () => {
+            const body = document.getElementById("app-body");
+            body.classList.toggle("dark");
+            const btn = document.getElementById("toggle-theme");
+            if (body.classList.contains("dark")) {
+                btn.textContent = "☀️ Light Mode";
+            } else {
+                btn.textContent = "🌙 Dark Mode";
+            }
+        });
+
 
 
         function filterAndSortTasks() {
@@ -302,6 +381,8 @@
             } 
             else if (currentView === "reminders") {
                 renderReminders();
+            } else if (currentView == "completed") {
+                renderCompletedTasks();
             }
         }
 
@@ -328,16 +409,29 @@
                 return;
             }
 
+           const formattedDueDate = taskDueDate 
+                ? new Date(taskDueDate).toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+                }) 
+            : null;
+
             const newTask = {
                 id: Date.now().toString(),
-                name: taskTitle,
+                name: taskName,
                 description: taskDescription,
                 priority: taskPriority,
                 category: taskCategory,
-                dueDate: taskDueDate,
-                completed: false,
-                createdAt: new Date().toISOString()
+                dueDate: formattedDueDate, 
+                estimatedTime: taskEstimatedTime,
+                createdAt: new Date().toISOString(),
+                completed: false
             };
+
             
             allTasks.push(newTask);
             saveTasksToLocalStorage();
@@ -353,10 +447,10 @@
             const taskList = document.getElementById('task-list');
             taskList.innerHTML = '';
             
-            const tasksToRender = filterAndSortTasks();
+            const tasksToRender = filterAndSortTasks().filter(task => !task.completed);
 
             if (tasksToRender.length === 0) {
-                taskList.innerHTML = '<li class="text-center text-gray-500 py-8">No matching task found.</li>';
+                taskList.innerHTML = '<li class="text-center text-gray-500 py-8">No matching task found</li>';
                 return;
             }
 
@@ -386,10 +480,46 @@
                         </span>
                         <span class="flex items-center space-x-1">
                             <i class="fa-solid fa-calendar-alt"></i>
-                            <span>${task.dueDate || 'N/A'}</span>
+                            <span>${
+                                task.dueDate 
+                                    ? new Date(task.dueDate).toLocaleString('en-US', {
+                                        year: 'numeric',
+                                        month: '2-digit',
+                                        day: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: true
+                                        }) 
+                                    : 'N/A'
+                            }</span>
                         </span>
+
                     </div>
                 `;
+
+                if(task.estimatedTime && task.completed && task.actualCompletionTime) {
+                    const est = parseFloat(task.estimatedTime);
+                    const act = (new Date(task.actualCompletionTime) - new Date(task.createdAt)) / (1000 * 60 * 60); // giờ
+                    const coeff = (act / est).toFixed(2);
+                    const coeffEl = document.createElement("div");
+                    coeffEl.className = "text-xs text-purple-600 mt-1";
+                    coeffEl.textContent = `Procrastination Coefficient: x${coeff}`;
+                    taskItem.appendChild(coeffEl);
+                }
+
+                if (task.dueDate && !task.completed) {
+                    const now = new Date();
+                    const due = new Date(task.dueDate);
+                    const diffMs = due - now;
+                    const diffHours = diffMs / (1000 * 60 * 60);
+
+                    if (diffHours < 24 && diffHours > 0) {
+                        const intensity = Math.min(100, Math.max(0, 100 - diffHours * 4));
+                        taskItem.style.backgroundColor = `rgba(255,0,0,${intensity/100})`;
+                    }
+                }
+
+
                 const checkbox = taskItem.querySelector('input[type="checkbox"]');
                 checkbox.addEventListener('change', () => toggleTaskStatus(task.id, task.completed));
                 taskList.appendChild(taskItem);
@@ -400,9 +530,26 @@
             const taskIndex = allTasks.findIndex(task => task.id === taskId);
             if (taskIndex !== -1) {
                 allTasks[taskIndex].completed = !currentStatus;
+                if (allTasks[taskIndex].completed) {
+                    allTasks[taskIndex].actualCompletionTime = new Date().toISOString();
+                }
                 saveTasksToLocalStorage();
                 updateDashboard(allTasks);
                 updateView();
+
+                if (allTasks[taskIndex].completed){
+                    launchFireworks();
+                }
+
+                if (allTasks[taskIndex].completed) {
+                    currentView = 'completed';
+                    renderCompletedTasks();
+                    document.getElementById('task-view').classList.add('hidden');
+                    document.getElementById('completed-view').classList.remove('hidden');
+
+                    document.getElementById('tasks-tab').classList.remove('border-b-2','border-blue-500','text-blue-500');
+                    document.getElementById('completed-tab').classList.add('border-b-2','border-blue-500','text-blue-500');
+                }
             }
         }
 
@@ -736,10 +883,71 @@
             }
         });
 
+        // --- Fireworks Effect ---
+        function launchFireworks() {
+            const canvas = document.getElementById("fireworks-canvas");
+            const ctx = canvas.getContext("2d");
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const particles = [];
+            const colors = ["#ff0000", "#ff7f00", "#ffff00", "#00ff00", "#0000ff", "#8b00ff"];
+
+            for (let i = 0; i < 100; i++) {
+                particles.push({
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    angle: Math.random() * 2 * Math.PI,
+                    speed: Math.random() * 5 + 2,
+                    radius: Math.random() * 2 + 1,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    alpha: 1
+                });
+            }
+
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                particles.forEach(p => {
+                    p.x += Math.cos(p.angle) * p.speed;
+                    p.y += Math.sin(p.angle) * p.speed;
+                    p.alpha -= 0.02;
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+
+            let frame = 0;
+            const interval = setInterval(() => {
+                animate();
+                frame++;
+                if (frame > 50) clearInterval(interval);
+            }, 30);
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const resetBtn = document.getElementById("reset-tasks");
+            if (resetBtn) {
+                resetBtn.addEventListener("click", () => {
+                    if (confirm("Are you sure you want to delete all tasks?")) {
+                        localStorage.clear(); 
+                        allTasks = [];        
+                        renderTasks();
+                        renderCompletedTasks();
+                        updateDashboard(allTasks);
+                        showMessage("All tasks have been deleted.", false);
+                    }
+                });
+            }
+        });
 
     </script>
 </head>
-<body class="p-6 bg-gray-50 font-sans">
+<body id="app-body" class="p-6 bg-gray-50 font-sans transition-colors duration-500">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
     <div class="max-w-7xl mx-auto bg-white p-8 rounded-xl shadow-lg">
         <div id="message-box" class="hidden"></div>
         <div class="flex justify-between items-center mb-6">
@@ -747,9 +955,19 @@
                 <h1 class="text-3xl font-bold text-blue-700">Todo Dashboard</h1>
                 <p class="text-gray-500">Manage your tasks, track progress, and stay organized</p>
             </div>
-            <button id="add-task-button" class="flex items-center space-x-2 bg-black text-white px-4 py-2 rounded-xl font-semibold shadow-md hover:bg-gray-800 transition-colors">
-                <i class="fa-solid fa-plus"></i>
-                <span>Add Task</span>
+            <div class="flex space-x-2 ml-auto">
+                <button id="toggle-theme" class="bg-gray-200 text-gray-800 px-3 py-2 rounded-xl font-semibold shadow hover:bg-gray-300 transition-colors">
+                    🌙 Dark Mode
+                </button>
+                <button id="add-task-button" class="flex items-center space-x-2 bg-black text-white px-4 py-2 rounded-xl font-semibold shadow-md hover:bg-gray-800 transition-colors">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Add Task</span>
+                </button>
+            </div>
+
+            <button id="reset-tasks" class="ml-2 bg-red-500 text-white px-4 py-2 rounded-xl font-semibold shadow-md hover:bg-red-600 transition-colors">
+                <i class="fa-solid fa-trash"></i>
+                <span>Reset</span>
             </button>
         </div>
         
@@ -779,6 +997,7 @@
 
         <div class="flex items-center space-x-8 text-gray-500 mb-6 border-b border-gray-200">
             <button id="tasks-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none border-b-2 border-blue-500 text-blue-500 transition-colors duration-200">Tasks</button>
+            <button id="completed-tab" class="py-2 px-4 -mb-px font-semibold focus::outline-none hover:text-blue-500 transition-colors duration-200">Completed</button>
             <button id="calendar-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none hover:text-blue-500 transition-colors duration-200">Calendar</button>
             <button id="progress-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none hover:text-blue-500 transition-colors duration-200">Progress</button>
             <button id="reminders-tab" class="py-2 px-4 -mb-px font-semibold focus:outline-none hover:text-blue-500 transition-colors duration-200">Reminders</button>
@@ -818,10 +1037,16 @@
                     Apply
                 </button>
             </div>
-            <h2 class="text-xl font-bold text-gray-800 mb-4">Task Management</h2>
-            <ul id="task-list" class="space-y-4">
-                </ul>
+
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Task Management</h2>
+                <ul id="task-list" class="space-y-4"></ul>
         </div>
+
+        <div id="completed-view" class="hidden">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Completed Tasks</h2>
+            <ul id="completed-list" class="space-y-4"></ul>
+        </div>
+
 
         <div id="calendar-view" class="hidden">
             <div class="bg-gray-100 p-6 rounded-xl shadow-sm mb-6">
@@ -885,7 +1110,7 @@
                     </div>
                     <div>
                         <label for="task-due-date" class="block text-sm font-medium text-gray-700">Due Date</label>
-                        <input type="date" id="task-due-date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2">
+                        <input type="datetime-local" id="task-due-date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2">
                     </div>
                     <div class="flex justify-end space-x-4 pt-4">
                         <button type="button" id="modal-cancel" class="px-4 py-2 text-sm font-medium text-gray-700 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors">Cancel</button>
@@ -895,7 +1120,6 @@
             </div>
         </div>
     </div>
+    <canvas id="fireworks-canvas" class="fixed top-0 left-0 w-full h-full pointer-events-none"></canvas>
 </body>
 </html>
-
-
