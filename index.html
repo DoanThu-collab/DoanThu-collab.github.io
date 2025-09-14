@@ -956,14 +956,13 @@
             if (resetBtn) {
                 resetBtn.addEventListener("click", () => {
                     if (confirm("Are you sure you want to delete all tasks?")) {
-                        localStorage.removeItem("allTasks"); 
-                        allTasks = [];        
-                        renderTasks();
-                        renderCompletedTasks();
-                        renderCalendar(allTasks);
+                        localStorage.removeItem("allTasks");
+                        allTasks = [];
                         updateDashboard(allTasks);
+                        updateView();
                         showMessage("All tasks have been deleted.", false);
                     }
+
                 });
             }
         });
