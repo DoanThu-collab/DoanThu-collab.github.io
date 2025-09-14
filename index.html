@@ -422,12 +422,11 @@
 
             const newTask = {
                 id: Date.now().toString(),
-                name: taskName,
+                name: taskTitle,
                 description: taskDescription,
                 priority: taskPriority,
                 category: taskCategory,
                 dueDate: formattedDueDate, 
-                estimatedTime: taskEstimatedTime,
                 createdAt: new Date().toISOString(),
                 completed: false
             };
@@ -932,7 +931,7 @@
             if (resetBtn) {
                 resetBtn.addEventListener("click", () => {
                     if (confirm("Are you sure you want to delete all tasks?")) {
-                        localStorage.clear(); 
+                        localStorage.removeItem("allTasks"); 
                         allTasks = [];        
                         renderTasks();
                         renderCompletedTasks();
