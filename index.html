@@ -410,15 +410,9 @@
             }
 
            const formattedDueDate = taskDueDate 
-                ? new Date(taskDueDate).toLocaleString('en-US', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-                }) 
-            : null;
+                ? new Date(taskDueDate).toISOString().split("T")[0] 
+                : null;
+
 
             const newTask = {
                 id: Date.now().toString(),
@@ -479,19 +473,9 @@
                         </span>
                         <span class="flex items-center space-x-1">
                             <i class="fa-solid fa-calendar-alt"></i>
-                            <span>${
-                                task.dueDate 
-                                    ? new Date(task.dueDate).toLocaleString('en-US', {
-                                        year: 'numeric',
-                                        month: '2-digit',
-                                        day: '2-digit',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: true
-                                        }) 
-                                    : 'N/A'
-                            }</span>
-                        </span>
+                                <span>${task.dueDate ? formatDateForDisplay(task.dueDate) : 'N/A'}</span>
+                        s</span>
+
 
                     </div>
                 `;
@@ -562,6 +546,13 @@
             document.getElementById('completed-tasks-count').textContent = completedTasks;
             document.getElementById('pending-tasks-count').textContent = pendingTasks;
         }
+
+        function formatDateForDisplay(dateStr) {
+            if (!dateStr) return "";
+            const [year, month, day] = dateStr.split("-");
+            return `${month}/${day}/${year}`; // MM/DD/YYYY
+        }
+
 
         // --- Calendar functions ---
         function renderCalendar() {
@@ -935,6 +926,7 @@
                         allTasks = [];        
                         renderTasks();
                         renderCompletedTasks();
+                        renderCalendar(allTasks);
                         updateDashboard(allTasks);
                         showMessage("All tasks have been deleted.", false);
                     }
